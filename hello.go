@@ -3,5 +3,9 @@ package main
 import "fmt"
 
 func main(){
-	fmt.Printf("Hello World !!")
+	fmt.Println("Started Programme with the message !!", PrintMessage())
+}
+
+func  PrintMessage() string{
+	return "Hello World !!"
 }
