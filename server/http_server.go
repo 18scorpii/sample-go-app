@@ -2,90 +2,40 @@ package server
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/18scorpii/sample-go-app/vals"
+	"github.com/gorilla/mux"
 )
 
-var employeesMap map[string]vals.Employee
-var err error
+/*
+	Static files are served using : http://localhost:8080/files/
 
+*/
 func StartHttpServer() {
-	//load all employees from the file system
-	employeesMap, err = vals.LoadEmployeesFromFile("./files/emp.json")
+	router := mux.NewRouter()
+	router.PathPrefix("/files/").Handler(http.StripPrefix("/files/", http.FileServer(http.Dir("./files"))))
+	router.HandleFunc("/employees", EmployeesGetHandler).Methods("GET")
+	router.HandleFunc("/employees", EmployeesPostHandler).Methods("POST")
+	router.HandleFunc("/employees/{id}", EmployeesPostHandler).Methods("PUT")
+	router.HandleFunc("/employees/{id}", EmployeesDeleteHandler).Methods("DELETE")
+	server := &http.Server{
+		Handler:      router,
+		Addr:         "localhost:8080",
+		WriteTimeout: 10 * time.Second,
+		ReadTimeout:  10 * time.Second,
+	}
+	log.Fatalf("Error in starting web server %v \n", server.ListenAndServe())
+}
+
+func EmployeesGetHandler(rw http.ResponseWriter, r *http.Request) {
+	employeesMap, err := vals.LoadEmployeesFromFile("./files/emp.json")
 	if err != nil {
 		log.Fatalf("Error in reading employees from file %v \n", err)
 	}
-	http.HandleFunc("/employees", EmployeesHandler)
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		log.Fatalf("Error in starting the web server %v \n", err)
-	}
-}
-
-func EmployeesHandler(rw http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		showAllEmployeesList(rw)
-	} else if r.Method == http.MethodPost {
-		decoder := json.NewDecoder(r.Body)
-		var employee vals.Employee
-		err := decoder.Decode(&employee)
-		if err != nil {
-			http.Error(rw, fmt.Sprintf("Error in Parsing Post Data - %v", err), http.StatusInternalServerError)
-			return
-		}
-		err = employee.IsValid()
-		if err != nil {
-			http.Error(rw, fmt.Sprintf("Error in Validating Employee - %v", err), http.StatusInternalServerError)
-			return
-		}
-		if _, ok := employeesMap[employee.Id]; ok {
-			http.Error(rw, fmt.Sprintf("Employee Id Already Present - %v", employee.Id), http.StatusInternalServerError)
-			return
-		}
-		employeesMap[employee.Id] = employee
-		err = vals.SaveEmployeesToFile("./files/emp.json", &employeesMap)
-		if err != nil {
-			http.Error(rw, err.Error(), http.StatusInternalServerError)
-			return
-		} else {
-			showAllEmployeesList(rw)
-		}
-	} else if r.Method == http.MethodPut {
-		decoder := json.NewDecoder(r.Body)
-		var employee vals.Employee
-		err := decoder.Decode(&employee)
-		if err != nil {
-			http.Error(rw, fmt.Sprintf("Error in Parsing Post Data - %v", err), http.StatusInternalServerError)
-			return
-		}
-		err = employee.IsValid()
-		if err != nil {
-			http.Error(rw, fmt.Sprintf("Error in Validating Employee - %v", err), http.StatusInternalServerError)
-			return
-		}
-		if _, ok := employeesMap[employee.Id]; !ok {
-			http.Error(rw, fmt.Sprintf("Employee Id Is Absent - %v", employee.Id), http.StatusInternalServerError)
-			return
-		}
-		employee.Version = employee.Version + 1
-		employeesMap[employee.Id] = employee
-		err = vals.SaveEmployeesToFile("./files/emp.json", &employeesMap)
-		if err != nil {
-			http.Error(rw, err.Error(), http.StatusInternalServerError)
-			return
-		} else {
-			showAllEmployeesList(rw)
-		}
-	} else {
-		sendErrorResponse(rw, "Only GET,POST Methods are supported", errors.New("Unsupported Methods"))
-	}
-}
-
-func showAllEmployeesList(rw http.ResponseWriter) {
 	employeeList := make([]vals.Employee, 0)
 	for _, v := range employeesMap {
 		employeeList = append(employeeList, v)
@@ -98,23 +48,77 @@ func showAllEmployeesList(rw http.ResponseWriter) {
 	rw.WriteHeader(http.StatusOK)
 	rw.Write(employeesJson)
 }
-func sendErrorResponse(rw http.ResponseWriter, message string, err error) {
-	errObj := ErrorObject{
-		Message: message,
-		Error:   err.Error(),
-		Time:    time.Now().String(),
+
+func EmployeesPostHandler(rw http.ResponseWriter, r *http.Request) {
+	var employee vals.Employee
+	if err := json.NewDecoder(r.Body).Decode(&employee); err != nil {
+		http.Error(rw, fmt.Sprintf("Error in Parsing Post Data - %v", err), http.StatusInternalServerError)
+		return
 	}
-	errObjJson, err := json.Marshal(errObj)
+	if err := employee.IsValid(); err != nil {
+		http.Error(rw, fmt.Sprintf("Error in Validating Employee - %v", err), http.StatusInternalServerError)
+		return
+	}
+	//Check if Employee is Already Present
+	employeesMap, err := vals.LoadEmployeesFromFile("./files/emp.json")
 	if err != nil {
-		log.Fatalf("Error in marshalling Error Object to JSON %v \n", err)
+		log.Fatalf("Error in reading employees from file %v \n", err)
 	}
-	rw.Header().Set("Content-Type", "application/json")
-	rw.WriteHeader(http.StatusInternalServerError)
-	rw.Write(errObjJson)
+	//check if its a update call, by looking for Path Param for IDs
+	vars := mux.Vars(r)
+	//Update Call Block
+	if employeeId, ok := vars["id"]; ok {
+		if oldValue, ok := employeesMap[employeeId]; !ok {
+			http.Error(rw, fmt.Sprintf("Employee Id Is Not Present - %v", employee.Id), http.StatusNotFound)
+			return
+		} else {
+			if oldValue.UpdateEmployee(employee) != nil {
+				http.Error(rw, fmt.Sprintf("Employee Id Doesnot Match - %v", employee.Id), http.StatusInternalServerError)
+				return
+			}
+			employeesMap[employeeId] = oldValue
+		}
+		//Insert Call Block, employee is a new entry
+	} else {
+		if _, ok := employeesMap[employee.Id]; ok {
+			http.Error(rw, fmt.Sprintf("Employee Id Already Present - %v", employee.Id), http.StatusInternalServerError)
+			return
+		}
+		employeesMap[employee.Id] = employee
+	}
+	//Rewrite the emp JSON file with all entries agains
+	err = vals.SaveEmployeesToFile("./files/emp.json", &employeesMap)
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	//Now reload and send output to response
+	EmployeesGetHandler(rw, r)
 }
 
-type ErrorObject struct {
-	Message string `json:"message"`
-	Error   string `json:"error"`
-	Time    string `json:"times"`
+func EmployeesDeleteHandler(rw http.ResponseWriter, r *http.Request) {
+	//Check if Employee is Already Present
+	employeesMap, err := vals.LoadEmployeesFromFile("./files/emp.json")
+	if err != nil {
+		log.Fatalf("Error in reading employees from file %v \n", err)
+	}
+	//check if its a update call, by looking for Path Param for IDs
+	vars := mux.Vars(r)
+	var employeeId string
+	if _, ok := vars["id"]; ok {
+		employeeId = vars["id"]
+		if _, ok := employeesMap[employeeId]; !ok {
+			http.Error(rw, fmt.Sprintf("Employee Id Is Not Present - %v", employeeId), http.StatusNotFound)
+			return
+		}
+	}
+	//Rewrite the emp JSON file with all entries agains
+	delete(employeesMap, employeeId)
+	err = vals.SaveEmployeesToFile("./files/emp.json", &employeesMap)
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	//Now reload and send output to response
+	EmployeesGetHandler(rw, r)
 }

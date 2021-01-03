@@ -1,28 +1,22 @@
 {
   "employees": [
     {
-      "name": "Smith",
-      "id": "B2001",
+      "name": "Joe Smith",
+      "id": "1",
       "dept": "Sales",
-      "version": 8
+      "version": 2
     },
     {
       "name": "Mark",
-      "id": "1234322",
+      "id": "2",
+      "dept": "Sales",
+      "version": 0
+    },
+    {
+      "name": "Johns",
+      "id": "3",
       "dept": "HR",
-      "version": 1
-    },
-    {
-      "name": "Joe",
-      "id": "A12345",
-      "dept": "Finance",
-      "version": 8
-    },
-    {
-      "name": "Mark",
-      "id": "12343221",
-      "dept": "Service",
-      "version": 1
+      "version": 5
     }
   ]
 }

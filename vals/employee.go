@@ -31,14 +31,15 @@ type Employees struct {
 	Employees []Employee `json:"employees"`
 }
 
-func NewEmployee(employeeMap map[string]interface{}) *Employee {
-	emp := Employee{
-		Name:    employeeMap["name"].(string), //casted using type assertion as its  an interface{}
-		Id:      employeeMap["id"].(string),
-		Dept:    employeeMap["dept"].(Department),
-		Version: 0,
+func (e *Employee) UpdateEmployee(employee Employee) error {
+	e.Name = employee.Name
+	e.Dept = employee.Dept
+	e.Version = e.Version + 1
+	if e.Id != employee.Id {
+		return errors.New("Id not matching")
+	} else {
+		return nil
 	}
-	return &emp
 }
 
 /*
