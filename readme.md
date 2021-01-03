@@ -1,22 +1,17 @@
-# Execution Commands 
+# Sample Application In Golang
 
-## To test
+## Requirement
 
-- cd ~/sample-go-app
-- go test 
+- Create a HR System to manage employees
+	- CURD operation on employees
+	- Store the data in the file system
+	- REST API using JSON
 
-## To Run
+## Execution Commands
 
-- cd ~/sample-go-app
-- go run main.go
- 
-## To Install
+- `go run main.go`
+- `go clean -testcache && go test -v ./...`		 ( To Clear cache and run all test cases )
+- `go test -v -run TestEmployeesUnmarshalling ./...`	( To Run a Specific Test Case )
+- `go install` ( To create a binary for local setup under the GOBIN folder )
+- `env GOOS=linux GOARCH=amd64 go build sample-go-app` ( To use this binary on a centos )
 
-- cd ~/sample-go-app
-- go install
-- find the mac binary under HOME/bin
-
-## To Compile
-
-- `env GOOS=linux GOARCH=amd64 go build github.com/18scorpii/sample-go-app`
-- Take the binary and run it on centos
